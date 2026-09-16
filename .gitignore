@@ -1,0 +1,35 @@
+# Secrets & local config
+.env
+.env.local
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Logs & runtime
+logs/
+*.log
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
