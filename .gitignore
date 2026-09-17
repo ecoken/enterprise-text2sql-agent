@@ -1,7 +1,10 @@
 # Secrets & local config
+# .env.* 覆盖 .env.bak / .env.prod 这类变体，再用 ! 放行模板文件
 .env
-.env.local
+.env.*
+!.env.example
 *.local
+*.bak
 
 # Python
 __pycache__/
@@ -33,3 +36,6 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# 评测自动生成的时间戳报告（基线已固化为 evaluation/baseline_*.json）
+backend/evaluation/reports/

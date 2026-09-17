@@ -56,7 +56,16 @@ graph_builder.add_edge("merge_retrieved_info", "filter_metric")
 graph_builder.add_edge("filter_table", "add_extra_context")
 graph_builder.add_edge("filter_metric", "add_extra_context")
 graph_builder.add_edge("add_extra_context", "generate_sql")
-graph_builder.add_edge("generate_sql", "validate_sql")
+
+# 生成SQL之后先看模型有没有判定"答不了"。
+# 判定答不了时直接结束，不走后续的校验与执行——
+# CANNOT_ANSWER 标记不是 SQL，送进 EXPLAIN 只会报一个看不懂的语法错误，
+# 然后触发纠错节点让模型再编一条，反而把本来正确的拒答给"修"成了错误答案。
+graph_builder.add_conditional_edges(
+    "generate_sql",
+    lambda state: END if state.get("cannot_answer") else "validate_sql",
+    {"validate_sql": "validate_sql", END: END},
+)
 
 graph_builder.add_conditional_edges("validate_sql",
                                     lambda state: "execute_sql" if state["error"] is None else "correct_sql",

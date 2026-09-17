@@ -1,0 +1,411 @@
+# 黄金评测集
+#
+# 用途：评估 Text2SQL Agent 的端到端质量。
+# 评分方式：执行准确率（Execution Accuracy）—— 将 Agent 生成的 SQL 与 reference_sql
+#           分别执行，比对结果集是否一致。不做 SQL 字符串比对，因为同一个问题存在
+#           多种等价写法。
+#
+# 字段说明：
+#   id            唯一编号
+#   level         难度层级 L1~L8
+#   question      用户提问（中文自然语言）
+#   focus         该题考察的能力点
+#   reference_sql 标准答案 SQL；expect_failure 为 true 的题目无此字段
+#   expect_failure 期望 Agent 无法作答（考察是否优雅拒答而非胡编字段）
+#
+# 本评测集已针对以下真实数据分布校准，更换数据集时需同步复核：
+#   - dim_date   仅覆盖 2025 年 Q1（1~3 月，90 天）
+#   - region_name 华东 / 华南 / 华北 / 华中 / 西南
+#   - member_level 黄金 / 白银 / 青铜 / 铂金（注意库中不含「会员」二字）
+#   - gender      男 / 女
+#   - country     中国
+#   - fact_order  115 行
+#
+# 设计约束：
+#   1. 参考 SQL 不得返回空结果集。两边都为空会被判为「通过」，
+#      而一个把过滤条件算错的 Agent 同样返回空，构成假阳性。
+#   2. TopN 类题目的切分点不得存在并列值，否则 LIMIT 取谁不确定。
+
+# ---------------------------------------------------------------- L1 基础聚合
+- id: L1-01
+  level: L1
+  question: 总共有多少笔订单
+  focus: 单表计数
+  reference_sql: SELECT COUNT(*) AS order_cnt FROM fact_order
+
+- id: L1-02
+  level: L1
+  question: 所有订单的销售总额是多少
+  focus: 单表求和
+  reference_sql: SELECT SUM(order_amount) AS total_amount FROM fact_order
+
+- id: L1-03
+  level: L1
+  question: 一共卖出了多少件商品
+  focus: 度量字段识别（数量 vs 金额）
+  reference_sql: SELECT SUM(order_quantity) AS total_qty FROM fact_order
+
+- id: L1-04
+  level: L1
+  question: 平均每笔订单的金额是多少
+  focus: 聚合函数选择
+  reference_sql: SELECT AVG(order_amount) AS avg_amount FROM fact_order
+
+- id: L1-05
+  level: L1
+  question: 有多少个客户下过单
+  focus: 去重计数
+  reference_sql: SELECT COUNT(DISTINCT customer_id) AS customer_cnt FROM fact_order
+
+# ------------------------------------------------------------ L2 单维度关联
+- id: L2-01
+  level: L2
+  question: 各个大区的销售总额分别是多少
+  focus: 事实表关联单张维度表 + 分组
+  reference_sql: |
+    SELECT r.region_name, SUM(f.order_amount) AS total_amount
+    FROM fact_order f
+    JOIN dim_region r ON f.region_id = r.region_id
+    GROUP BY r.region_name
+
+- id: L2-02
+  level: L2
+  question: 每个商品类别卖了多少件
+  focus: 维度表关联 + 数量聚合
+  reference_sql: |
+    SELECT p.category, SUM(f.order_quantity) AS total_qty
+    FROM fact_order f
+    JOIN dim_product p ON f.product_id = p.product_id
+    GROUP BY p.category
+
+- id: L2-03
+  level: L2
+  question: 不同会员等级的客户贡献了多少销售额
+  focus: 客户维度关联
+  reference_sql: |
+    SELECT c.member_level, SUM(f.order_amount) AS total_amount
+    FROM fact_order f
+    JOIN dim_customer c ON f.customer_id = c.customer_id
+    GROUP BY c.member_level
+
+- id: L2-04
+  level: L2
+  question: 各省份的订单数量分别是多少
+  focus: 同一维度表的不同字段（province 而非 region_name）
+  reference_sql: |
+    SELECT r.province, COUNT(*) AS order_cnt
+    FROM fact_order f
+    JOIN dim_region r ON f.region_id = r.region_id
+    GROUP BY r.province
+
+- id: L2-05
+  level: L2
+  question: 每个品牌的平均订单金额是多少
+  focus: 分组 + 平均
+  reference_sql: |
+    SELECT p.brand, AVG(f.order_amount) AS avg_amount
+    FROM fact_order f
+    JOIN dim_product p ON f.product_id = p.product_id
+    GROUP BY p.brand
+
+# ------------------------------------------------------------ L3 多维度关联
+- id: L3-01
+  level: L3
+  question: 华东地区各商品类别的销售额是多少
+  focus: 两张维度表关联 + 取值过滤
+  reference_sql: |
+    SELECT p.category, SUM(f.order_amount) AS total_amount
+    FROM fact_order f
+    JOIN dim_region r ON f.region_id = r.region_id
+    JOIN dim_product p ON f.product_id = p.product_id
+    WHERE r.region_name = '华东'
+    GROUP BY p.category
+
+- id: L3-02
+  level: L3
+  question: 2025年各大区黄金会员的销售额
+  focus: |
+    三张维度表关联。用户说「黄金会员」，库中取值为「黄金」，
+    需依赖取值召回完成口语到实际枚举值的映射。
+  reference_sql: |
+    SELECT r.region_name, SUM(f.order_amount) AS total_amount
+    FROM fact_order f
+    JOIN dim_region r ON f.region_id = r.region_id
+    JOIN dim_customer c ON f.customer_id = c.customer_id
+    JOIN dim_date d ON f.date_id = d.date_id
+    WHERE d.year = 2025 AND c.member_level = '黄金'
+    GROUP BY r.region_name
+
+- id: L3-03
+  level: L3
+  question: 每个季度不同品牌的销量
+  focus: 时间维度 + 商品维度，多字段分组
+  reference_sql: |
+    SELECT d.quarter, p.brand, SUM(f.order_quantity) AS total_qty
+    FROM fact_order f
+    JOIN dim_date d ON f.date_id = d.date_id
+    JOIN dim_product p ON f.product_id = p.product_id
+    GROUP BY d.quarter, p.brand
+
+- id: L3-04
+  level: L3
+  question: 男性客户在各个省份的订单金额
+  focus: 客户属性过滤 + 地区分组
+  reference_sql: |
+    SELECT r.province, SUM(f.order_amount) AS total_amount
+    FROM fact_order f
+    JOIN dim_customer c ON f.customer_id = c.customer_id
+    JOIN dim_region r ON f.region_id = r.region_id
+    WHERE c.gender = '男'
+    GROUP BY r.province
+
+- id: L3-05
+  level: L3
+  question: 各年份各类别商品的销售总额
+  focus: 时间 + 商品双维度分组
+  reference_sql: |
+    SELECT d.year, p.category, SUM(f.order_amount) AS total_amount
+    FROM fact_order f
+    JOIN dim_date d ON f.date_id = d.date_id
+    JOIN dim_product p ON f.product_id = p.product_id
+    GROUP BY d.year, p.category
+
+# -------------------------------------------------------------- L4 相对时间
+# 这组题考察 add_extra_context 注入的当前日期是否被正确使用。
+# 数据仅覆盖 2025 年 Q1，而当前已是 2026 年，因此全组锚定在「去年」上：
+# 凡涉及「今年」「上个季度」的问法两边都会返回空集，无法区分算对与算错，
+# 属于假阳性，不纳入评测集。
+- id: L4-01
+  level: L4
+  question: 去年的销售总额是多少
+  focus: 相对时间推算（去年 = 当前年份 - 1 = 2025）
+  reference_sql: |
+    SELECT SUM(f.order_amount) AS total_amount
+    FROM fact_order f
+    JOIN dim_date d ON f.date_id = d.date_id
+    WHERE d.year = YEAR(CURDATE()) - 1
+
+- id: L4-02
+  level: L4
+  question: 去年第一季度的订单量是多少
+  focus: 相对年份 + 季度过滤（quarter 存储格式为 'Q1'）
+  reference_sql: |
+    SELECT COUNT(*) AS order_cnt
+    FROM fact_order f
+    JOIN dim_date d ON f.date_id = d.date_id
+    WHERE d.year = YEAR(CURDATE()) - 1 AND d.quarter = 'Q1'
+
+- id: L4-03
+  level: L4
+  question: 去年各大区的销售额分别是多少
+  focus: 相对时间 + 维度分组
+  reference_sql: |
+    SELECT r.region_name, SUM(f.order_amount) AS total_amount
+    FROM fact_order f
+    JOIN dim_date d ON f.date_id = d.date_id
+    JOIN dim_region r ON f.region_id = r.region_id
+    WHERE d.year = YEAR(CURDATE()) - 1
+    GROUP BY r.region_name
+
+- id: L4-04
+  level: L4
+  question: 去年销售额最高的品类是哪个
+  focus: |
+    相对时间 + 排序取首位。明确说「销售额」而非「卖得最好」，避免
+    销量与销售额的歧义。最小正确答案只有品类名一列。期望：手机数码。
+  reference_sql: |
+    SELECT p.category
+    FROM fact_order f
+    JOIN dim_date d ON f.date_id = d.date_id
+    JOIN dim_product p ON f.product_id = p.product_id
+    WHERE d.year = YEAR(CURDATE()) - 1
+    GROUP BY p.category
+    ORDER BY SUM(f.order_amount) DESC
+    LIMIT 1
+
+- id: L4-05
+  level: L4
+  question: 去年每个月的销售额分别是多少
+  focus: 相对时间 + 月份维度（数据覆盖 1~3 月）
+  reference_sql: |
+    SELECT d.month, SUM(f.order_amount) AS total_amount
+    FROM fact_order f
+    JOIN dim_date d ON f.date_id = d.date_id
+    WHERE d.year = YEAR(CURDATE()) - 1
+    GROUP BY d.month
+
+# -------------------------------------------------------------- L5 指标口径
+- id: L5-01
+  level: L5
+  question: GMV 是多少
+  focus: 指标英文缩写识别
+  reference_sql: SELECT SUM(order_amount) AS gmv FROM fact_order
+
+- id: L5-02
+  level: L5
+  question: 成交总额排名前三的省份
+  focus: 指标别名（成交总额 → GMV → order_amount）+ TopN
+  reference_sql: |
+    SELECT r.province, SUM(f.order_amount) AS gmv
+    FROM fact_order f
+    JOIN dim_region r ON f.region_id = r.region_id
+    GROUP BY r.province
+    ORDER BY gmv DESC
+    LIMIT 3
+
+- id: L5-03
+  level: L5
+  question: AOV 是多少
+  focus: |
+    平均订单金额。注意：当前 meta_config.yaml 中 AOV 的 relevant_columns 误配为
+    order_quantity，基线阶段此题预期失败，修正元数据后应通过。
+  reference_sql: SELECT AVG(order_amount) AS aov FROM fact_order
+
+- id: L5-04
+  level: L5
+  question: 各会员等级的平均订单金额是多少
+  focus: 指标别名 + 分组
+  reference_sql: |
+    SELECT c.member_level, AVG(f.order_amount) AS aov
+    FROM fact_order f
+    JOIN dim_customer c ON f.customer_id = c.customer_id
+    GROUP BY c.member_level
+
+# ---------------------------------------------------------- L6 模糊取值召回
+# 这组题的关键词是字段的「取值」而非「字段名」，考察 Elasticsearch 取值召回链路。
+- id: L6-01
+  level: L6
+  question: 华东地区卖了多少钱
+  focus: 取值召回（华东 → dim_region.region_name）+ 口语化表述
+  reference_sql: |
+    SELECT SUM(f.order_amount) AS total_amount
+    FROM fact_order f
+    JOIN dim_region r ON f.region_id = r.region_id
+    WHERE r.region_name = '华东'
+
+- id: L6-02
+  level: L6
+  question: 黄金会员一共下了多少单
+  focus: |
+    取值召回（黄金会员 → dim_customer.member_level = '黄金'）。
+    用户口语带「会员」二字而库中枚举值不带，考察 ES 的部分匹配能力。
+  reference_sql: |
+    SELECT COUNT(*) AS order_cnt
+    FROM fact_order f
+    JOIN dim_customer c ON f.customer_id = c.customer_id
+    WHERE c.member_level = '黄金'
+
+- id: L6-03
+  level: L6
+  question: 华南大区包含哪些省份
+  focus: 纯维度表查询，不涉及事实表
+  reference_sql: |
+    SELECT DISTINCT province
+    FROM dim_region
+    WHERE region_name = '华南'
+
+- id: L6-04
+  level: L6
+  question: 女性客户买得最多的品类是什么
+  focus: |
+    取值召回 + 排序。问的是「是什么」，最小正确答案只有品类名一列，
+    Agent 额外返回销量也算通过。期望：食品饮料。
+  reference_sql: |
+    SELECT p.category
+    FROM fact_order f
+    JOIN dim_customer c ON f.customer_id = c.customer_id
+    JOIN dim_product p ON f.product_id = p.product_id
+    WHERE c.gender = '女'
+    GROUP BY p.category
+    ORDER BY SUM(f.order_quantity) DESC
+    LIMIT 1
+
+- id: L6-05
+  level: L6
+  question: 中国的订单总金额是多少
+  focus: 取值召回（中国 → dim_region.country）
+  reference_sql: |
+    SELECT SUM(f.order_amount) AS total_amount
+    FROM fact_order f
+    JOIN dim_region r ON f.region_id = r.region_id
+    WHERE r.country = '中国'
+
+# ------------------------------------------------------------- L7 排序 TopN
+- id: L7-01
+  level: L7
+  question: 销售额最高的五个商品
+  focus: TopN + 商品维度
+  reference_sql: |
+    SELECT p.product_name, SUM(f.order_amount) AS total_amount
+    FROM fact_order f
+    JOIN dim_product p ON f.product_id = p.product_id
+    GROUP BY p.product_name
+    ORDER BY total_amount DESC
+    LIMIT 5
+
+- id: L7-02
+  level: L7
+  question: 订单量最少的两个省份
+  focus: |
+    升序排序（区分 ASC / DESC）。取两个而非三个，是因为第 3、4 名订单量
+    并列（浙江省与北京市均为 19 单），LIMIT 3 的结果不唯一会造成误判。
+  reference_sql: |
+    SELECT r.province, COUNT(*) AS order_cnt
+    FROM fact_order f
+    JOIN dim_region r ON f.region_id = r.region_id
+    GROUP BY r.province
+    ORDER BY order_cnt ASC
+    LIMIT 2
+
+- id: L7-03
+  level: L7
+  question: 销售额最高的品牌是哪个
+  focus: |
+    TopN 取首位。原问法「哪个品牌卖得最好」存在销量与销售额两种合理
+    解读，无唯一正确答案，属于无效评测项，已改为明确指定销售额。
+    最小正确答案只有品牌名一列。期望：苹果。
+  reference_sql: |
+    SELECT p.brand
+    FROM fact_order f
+    JOIN dim_product p ON f.product_id = p.product_id
+    GROUP BY p.brand
+    ORDER BY SUM(f.order_amount) DESC
+    LIMIT 1
+
+- id: L7-04
+  level: L7
+  question: 把各大区按销售额从高到低排列
+  focus: 显式排序方向
+  reference_sql: |
+    SELECT r.region_name, SUM(f.order_amount) AS total_amount
+    FROM fact_order f
+    JOIN dim_region r ON f.region_id = r.region_id
+    GROUP BY r.region_name
+    ORDER BY total_amount DESC
+
+# --------------------------------------------------------- L8 边界与拒答能力
+# 这组题没有正确答案，考察 Agent 是否会凭空捏造不存在的字段或指标。
+# 期望行为：明确告知无法回答，而非生成引用虚构字段的 SQL。
+- id: L8-01
+  level: L8
+  question: 客户的手机号是多少
+  focus: 字段不存在，应拒答而非编造 phone 字段
+  expect_failure: true
+
+- id: L8-02
+  level: L8
+  question: 上个月的利润是多少
+  focus: 数仓无成本字段，无法计算利润，应拒答
+  expect_failure: true
+
+- id: L8-03
+  level: L8
+  question: 各门店的销售额排名
+  focus: 无门店维度，应拒答而非误用地区维度替代
+  expect_failure: true
+
+- id: L8-04
+  level: L8
+  question: 退货率是多少
+  focus: 无退货相关字段，应拒答
+  expect_failure: true

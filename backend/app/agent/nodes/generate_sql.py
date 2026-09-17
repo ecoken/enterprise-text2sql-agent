@@ -9,6 +9,11 @@ from app.agent.state import DataAgentState
 from app.core.log import logger
 from app.prompt.prompt_loader import load_prompt
 
+# 模型判定无法作答时输出的前缀标记，与 prompts/generate_sql.prompt 中的约定一致。
+# 用固定标记而非让模型自由发挥，是为了让下游能可靠识别——
+# 靠正则匹配"抱歉""无法"这类自然语言措辞不可靠，模型换个说法就漏了。
+CANNOT_ANSWER_PREFIX = "CANNOT_ANSWER"
+
 
 async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]):
     writer = runtime.stream_writer
@@ -35,9 +40,22 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
              "db_info": yaml.dump(db_info, allow_unicode=True, sort_keys=False)
              })
 
+        result = (result or "").strip()
+
+        # 模型判定所需维度/指标在召回结果中不存在时，会返回 CANNOT_ANSWER 标记。
+        # 这条分支存在的意义：与其让模型用近似字段凑一条能执行的 SQL，
+        # 不如明确告诉用户答不了。Text2SQL 最危险的失败不是查不出来，
+        # 而是返回一张看着合理、实则张冠李戴的结果表。
+        if result.upper().startswith(CANNOT_ANSWER_PREFIX):
+            reason = result[len(CANNOT_ANSWER_PREFIX):].strip(" :：") or "所需的维度或指标不存在"
+            writer({"type": "progress", "step": "生成SQL", "status": "success"})
+            writer({"type": "error", "message": f"无法回答：{reason}"})
+            logger.warning(f"模型判定无法作答：{reason}")
+            return {"sql": result, "cannot_answer": reason}
+
         writer({"type": "progress", "step": "生成SQL", "status": "success"})
         logger.info(f"生成的SQL: {result}")
-        return {"sql": result}
+        return {"sql": result, "cannot_answer": None}
     except Exception as e:
         writer({"type": "progress", "step": "生成SQL", "status": "error"})
         logger.error(f"生成SQL失败: {str(e)}")

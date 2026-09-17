@@ -56,3 +56,5 @@ class DataAgentState(TypedDict):
     sql: str  # 生成的SQL
 
     error: str  # 验证SQL时的错误信息
+
+    cannot_answer: str  # 模型判定所需维度/指标不存在时的说明；为 None 表示可正常作答
