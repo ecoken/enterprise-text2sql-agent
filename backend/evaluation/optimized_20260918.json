@@ -1,0 +1,430 @@
+{
+  "summary": {
+    "generated_at": "2026-09-18T04:13:37",
+    "total": 37,
+    "passed": 36,
+    "accuracy_pct": 97.3,
+    "execution_accuracy_pct": 97.0,
+    "refusal_accuracy_pct": 100.0,
+    "by_level": {
+      "L1": {
+        "total": 5,
+        "passed": 5,
+        "accuracy_pct": 100.0
+      },
+      "L2": {
+        "total": 5,
+        "passed": 5,
+        "accuracy_pct": 100.0
+      },
+      "L3": {
+        "total": 5,
+        "passed": 5,
+        "accuracy_pct": 100.0
+      },
+      "L4": {
+        "total": 5,
+        "passed": 4,
+        "accuracy_pct": 80.0
+      },
+      "L5": {
+        "total": 4,
+        "passed": 4,
+        "accuracy_pct": 100.0
+      },
+      "L6": {
+        "total": 5,
+        "passed": 5,
+        "accuracy_pct": 100.0
+      },
+      "L7": {
+        "total": 4,
+        "passed": 4,
+        "accuracy_pct": 100.0
+      },
+      "L8": {
+        "total": 4,
+        "passed": 4,
+        "accuracy_pct": 100.0
+      }
+    },
+    "latency_ms": {
+      "p50": 17459,
+      "p95": 38705,
+      "mean": 19176,
+      "max": 50644
+    }
+  },
+  "records": [
+    {
+      "id": "L1-01",
+      "level": "L1",
+      "question": "总共有多少笔订单",
+      "expect_failure": false,
+      "generated_sql": "SELECT COUNT(*) AS total_orders FROM fact_order;",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 8000
+    },
+    {
+      "id": "L1-02",
+      "level": "L1",
+      "question": "所有订单的销售总额是多少",
+      "expect_failure": false,
+      "generated_sql": "SELECT SUM(order_amount) AS GMV FROM fact_order;",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 10226
+    },
+    {
+      "id": "L1-03",
+      "level": "L1",
+      "question": "一共卖出了多少件商品",
+      "expect_failure": false,
+      "generated_sql": "SELECT SUM(order_quantity) AS total_quantity FROM fact_order;",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 14691
+    },
+    {
+      "id": "L1-04",
+      "level": "L1",
+      "question": "平均每笔订单的金额是多少",
+      "expect_failure": false,
+      "generated_sql": "SELECT AVG(order_amount) AS AOV FROM fact_order;",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 20625
+    },
+    {
+      "id": "L1-05",
+      "level": "L1",
+      "question": "有多少个客户下过单",
+      "expect_failure": false,
+      "generated_sql": "SELECT COUNT(DISTINCT customer_id) AS ordered_customer_count FROM fact_order;",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 12433
+    },
+    {
+      "id": "L2-01",
+      "level": "L2",
+      "question": "各个大区的销售总额分别是多少",
+      "expect_failure": false,
+      "generated_sql": "SELECT r.region_name, SUM(f.order_amount) AS sales_total\nFROM fact_order f\nJOIN dim_region r ON f.region_id = r.region_id\nGROUP BY r.region_name;",
+      "passed": true,
+      "reason": "结果集一致（5 行）",
+      "latency_ms": 11170
+    },
+    {
+      "id": "L2-02",
+      "level": "L2",
+      "question": "每个商品类别卖了多少件",
+      "expect_failure": false,
+      "generated_sql": "SELECT p.category, SUM(f.order_quantity) AS total_quantity FROM fact_order f JOIN dim_product p ON f.product_id = p.product_id GROUP BY p.category;",
+      "passed": true,
+      "reason": "结果集一致（6 行）",
+      "latency_ms": 15687
+    },
+    {
+      "id": "L2-03",
+      "level": "L2",
+      "question": "不同会员等级的客户贡献了多少销售额",
+      "expect_failure": false,
+      "generated_sql": "SELECT c.member_level, COALESCE(SUM(o.order_amount), 0) AS sales_amount\nFROM dim_customer c\nLEFT JOIN fact_order o ON c.customer_id = o.customer_id\nGROUP BY c.member_level;",
+      "passed": true,
+      "reason": "结果集一致（4 行）",
+      "latency_ms": 20011
+    },
+    {
+      "id": "L2-04",
+      "level": "L2",
+      "question": "各省份的订单数量分别是多少",
+      "expect_failure": false,
+      "generated_sql": "SELECT d.province AS 省份, COUNT(f.order_id) AS 订单数量 FROM fact_order f JOIN dim_region d ON f.region_id = d.region_id GROUP BY d.province",
+      "passed": true,
+      "reason": "结果集一致（6 行）",
+      "latency_ms": 24598
+    },
+    {
+      "id": "L2-05",
+      "level": "L2",
+      "question": "每个品牌的平均订单金额是多少",
+      "expect_failure": false,
+      "generated_sql": "SELECT d.brand, AVG(f.order_amount) AS avg_order_amount\nFROM fact_order f\nJOIN dim_product d ON f.product_id = d.product_id\nGROUP BY d.brand;",
+      "passed": true,
+      "reason": "结果集一致（15 行）",
+      "latency_ms": 27041
+    },
+    {
+      "id": "L3-01",
+      "level": "L3",
+      "question": "华东地区各商品类别的销售额是多少",
+      "expect_failure": false,
+      "generated_sql": "SELECT p.category AS 商品类别, SUM(o.order_amount) AS 销售额\nFROM fact_order o\nJOIN dim_region r ON o.region_id = r.region_id\nJOIN dim_product p ON o.product_id = p.product_id\nWHERE r.region_name = '华东'\nGROUP BY p.category;",
+      "passed": true,
+      "reason": "结果集一致（6 行）",
+      "latency_ms": 28382
+    },
+    {
+      "id": "L3-02",
+      "level": "L3",
+      "question": "2025年各大区黄金会员的销售额",
+      "expect_failure": false,
+      "generated_sql": "SELECT r.region_name AS 大区, SUM(o.order_amount) AS 销售额\nFROM fact_order o\nJOIN dim_region r ON o.region_id = r.region_id\nJOIN dim_customer c ON o.customer_id = c.customer_id\nWHERE c.member_level = '黄金'\n  AND o.date_id BETWEEN 20250101 AND 20251231\nGROUP BY r.region_name;",
+      "passed": true,
+      "reason": "结果集一致（4 行）",
+      "latency_ms": 13427
+    },
+    {
+      "id": "L3-03",
+      "level": "L3",
+      "question": "每个季度不同品牌的销量",
+      "expect_failure": false,
+      "generated_sql": "SELECT d.quarter, p.brand, SUM(f.order_quantity) AS sales_volume\nFROM fact_order f\nJOIN dim_product p ON f.product_id = p.product_id\nJOIN dim_date d ON f.date_id = d.date_id\nGROUP BY d.quarter, p.brand\nORDER BY d.quarter, p.brand;",
+      "passed": true,
+      "reason": "结果集一致（15 行）",
+      "latency_ms": 11100
+    },
+    {
+      "id": "L3-04",
+      "level": "L3",
+      "question": "男性客户在各个省份的订单金额",
+      "expect_failure": false,
+      "generated_sql": "SELECT r.province, SUM(o.order_amount) AS order_amount\nFROM fact_order o\nJOIN dim_customer c ON o.customer_id = c.customer_id\nJOIN dim_region r ON o.region_id = r.region_id\nWHERE c.gender = '男'\nGROUP BY r.province;",
+      "passed": true,
+      "reason": "结果集一致（5 行）",
+      "latency_ms": 20850
+    },
+    {
+      "id": "L3-05",
+      "level": "L3",
+      "question": "各年份各类别商品的销售总额",
+      "expect_failure": false,
+      "generated_sql": "SELECT d.year AS 年份, p.category AS 类别, SUM(f.order_amount) AS 销售总额\nFROM fact_order f\nJOIN dim_date d ON f.date_id = d.date_id\nJOIN dim_product p ON f.product_id = p.product_id\nGROUP BY d.year, p.category\nORDER BY d.year, p.category;",
+      "passed": true,
+      "reason": "结果集一致（6 行）",
+      "latency_ms": 36522
+    },
+    {
+      "id": "L4-01",
+      "level": "L4",
+      "question": "去年的销售总额是多少",
+      "expect_failure": false,
+      "generated_sql": "SELECT SUM(order_amount) AS 销售总额 FROM fact_order WHERE date_id BETWEEN 20250101 AND 20251231;",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 15828
+    },
+    {
+      "id": "L4-02",
+      "level": "L4",
+      "question": "去年第一季度的订单量是多少",
+      "expect_failure": false,
+      "generated_sql": "SELECT COUNT(fo.order_id) AS order_count\nFROM fact_order AS fo\nJOIN dim_date AS dd ON fo.date_id = dd.date_id\nWHERE dd.quarter = 'Q1'\n  AND dd.date_id BETWEEN 20250101 AND 20250331;",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 22934
+    },
+    {
+      "id": "L4-03",
+      "level": "L4",
+      "question": "去年各大区的销售额分别是多少",
+      "expect_failure": false,
+      "generated_sql": "SELECT dr.region_name AS 大区, SUM(fo.order_amount) AS 销售额 FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id WHERE fo.date_id >= 20250101 AND fo.date_id < 20260101 GROUP BY dr.region_name;",
+      "passed": true,
+      "reason": "结果集一致（5 行）",
+      "latency_ms": 19108
+    },
+    {
+      "id": "L4-04",
+      "level": "L4",
+      "question": "去年销售额最高的品类是哪个",
+      "expect_failure": false,
+      "generated_sql": "SELECT dp.category, SUM(fo.order_amount) AS total_sales\nFROM fact_order fo\nJOIN dim_product dp ON fo.product_id = dp.product_id\nWHERE fo.date_id BETWEEN 20250101 AND 20251231\nGROUP BY dp.category\nORDER BY total_sales DESC\nLIMIT 1;",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 14598
+    },
+    {
+      "id": "L4-05",
+      "level": "L4",
+      "question": "去年每个月的销售额分别是多少",
+      "expect_failure": false,
+      "generated_sql": "SELECT DATE_FORMAT(STR_TO_DATE(date_id, '%Y%m%d'), '%Y-%m') AS month, SUM(order_amount) AS sales_amount FROM fact_order WHERE date_id >= 20250101 AND date_id < 20260101 GROUP BY DATE_FORMAT(STR_TO_DATE(date_id, '%Y%m%d'), '%Y-%m') ORDER BY month;",
+      "passed": false,
+      "reason": "结果集不一致：生成 3 行 / 期望 3 行",
+      "latency_ms": 14451
+    },
+    {
+      "id": "L5-01",
+      "level": "L5",
+      "question": "GMV 是多少",
+      "expect_failure": false,
+      "generated_sql": "SELECT SUM(order_amount) AS GMV FROM fact_order;",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 21583
+    },
+    {
+      "id": "L5-02",
+      "level": "L5",
+      "question": "成交总额排名前三的省份",
+      "expect_failure": false,
+      "generated_sql": "SELECT dr.province, SUM(fo.order_amount) AS GMV\nFROM fact_order fo\nJOIN dim_region dr ON fo.region_id = dr.region_id\nGROUP BY dr.province\nORDER BY GMV DESC\nLIMIT 3;",
+      "passed": true,
+      "reason": "结果集一致（3 行）",
+      "latency_ms": 22599
+    },
+    {
+      "id": "L5-03",
+      "level": "L5",
+      "question": "AOV 是多少",
+      "expect_failure": false,
+      "generated_sql": "SELECT AVG(order_amount) AS AOV FROM fact_order;",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 16034
+    },
+    {
+      "id": "L5-04",
+      "level": "L5",
+      "question": "各会员等级的平均订单金额是多少",
+      "expect_failure": false,
+      "generated_sql": "SELECT c.member_level, AVG(o.order_amount) AS avg_order_amount\nFROM fact_order o\nJOIN dim_customer c ON o.customer_id = c.customer_id\nGROUP BY c.member_level;",
+      "passed": true,
+      "reason": "结果集一致（4 行）",
+      "latency_ms": 38705
+    },
+    {
+      "id": "L6-01",
+      "level": "L6",
+      "question": "华东地区卖了多少钱",
+      "expect_failure": false,
+      "generated_sql": "SELECT SUM(fo.order_amount) AS GMV\nFROM fact_order fo\nJOIN dim_region dr ON fo.region_id = dr.region_id\nWHERE dr.region_name = '华东';",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 7246
+    },
+    {
+      "id": "L6-02",
+      "level": "L6",
+      "question": "黄金会员一共下了多少单",
+      "expect_failure": false,
+      "generated_sql": "SELECT COUNT(o.order_id) AS order_count\nFROM fact_order o\nJOIN dim_customer c ON o.customer_id = c.customer_id\nWHERE c.member_level = '黄金';",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 24834
+    },
+    {
+      "id": "L6-03",
+      "level": "L6",
+      "question": "华南大区包含哪些省份",
+      "expect_failure": false,
+      "generated_sql": "SELECT DISTINCT province FROM dim_region WHERE region_name = '华南'",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 16040
+    },
+    {
+      "id": "L6-04",
+      "level": "L6",
+      "question": "女性客户买得最多的品类是什么",
+      "expect_failure": false,
+      "generated_sql": "SELECT p.category\nFROM fact_order o\nJOIN dim_customer c ON o.customer_id = c.customer_id\nJOIN dim_product p ON o.product_id = p.product_id\nWHERE c.gender = '女'\nGROUP BY p.category\nORDER BY SUM(o.order_quantity) DESC\nLIMIT 1;",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 15296
+    },
+    {
+      "id": "L6-05",
+      "level": "L6",
+      "question": "中国的订单总金额是多少",
+      "expect_failure": false,
+      "generated_sql": "SELECT SUM(f.order_amount) AS 订单总金额\nFROM fact_order f\nJOIN dim_region r ON f.region_id = r.region_id\nWHERE r.country = '中国';",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 7716
+    },
+    {
+      "id": "L7-01",
+      "level": "L7",
+      "question": "销售额最高的五个商品",
+      "expect_failure": false,
+      "generated_sql": "SELECT p.product_name AS 商品名称, SUM(o.order_amount) AS 销售额\nFROM fact_order o\nJOIN dim_product p ON o.product_id = p.product_id\nGROUP BY p.product_name\nORDER BY 销售额 DESC\nLIMIT 5;",
+      "passed": true,
+      "reason": "结果集一致（5 行）",
+      "latency_ms": 17835
+    },
+    {
+      "id": "L7-02",
+      "level": "L7",
+      "question": "订单量最少的两个省份",
+      "expect_failure": false,
+      "generated_sql": "SELECT r.province, COUNT(f.order_id) AS order_count FROM fact_order f JOIN dim_region r ON f.region_id = r.region_id GROUP BY r.province ORDER BY order_count ASC LIMIT 2;",
+      "passed": true,
+      "reason": "结果集一致（2 行）",
+      "latency_ms": 23580
+    },
+    {
+      "id": "L7-03",
+      "level": "L7",
+      "question": "销售额最高的品牌是哪个",
+      "expect_failure": false,
+      "generated_sql": "SELECT dim_product.brand, SUM(fact_order.order_amount) AS 销售额 FROM fact_order JOIN dim_product ON fact_order.product_id = dim_product.product_id GROUP BY dim_product.brand ORDER BY SUM(fact_order.order_amount) DESC LIMIT 1;",
+      "passed": true,
+      "reason": "结果集一致（1 行）",
+      "latency_ms": 16718
+    },
+    {
+      "id": "L7-04",
+      "level": "L7",
+      "question": "把各大区按销售额从高到低排列",
+      "expect_failure": false,
+      "generated_sql": "SELECT r.region_name, SUM(o.order_amount) AS sales_amount\nFROM fact_order o\nJOIN dim_region r ON o.region_id = r.region_id\nGROUP BY r.region_name\nORDER BY sales_amount DESC;",
+      "passed": true,
+      "reason": "结果集一致（5 行）",
+      "latency_ms": 17459
+    },
+    {
+      "id": "L8-01",
+      "level": "L8",
+      "question": "客户的手机号是多少",
+      "expect_failure": true,
+      "generated_sql": "CANNOT_ANSWER: 缺少客户手机号字段",
+      "passed": true,
+      "reason": "生成的 SQL 无法执行，未向用户返回错误数据",
+      "latency_ms": 12433
+    },
+    {
+      "id": "L8-02",
+      "level": "L8",
+      "question": "上个月的利润是多少",
+      "expect_failure": true,
+      "generated_sql": "CANNOT_ANSWER: 缺少利润指标及对应数据表",
+      "passed": true,
+      "reason": "生成的 SQL 无法执行，未向用户返回错误数据",
+      "latency_ms": 19184
+    },
+    {
+      "id": "L8-03",
+      "level": "L8",
+      "question": "各门店的销售额排名",
+      "expect_failure": true,
+      "generated_sql": "CANNOT_ANSWER: 缺少门店维度",
+      "passed": true,
+      "reason": "生成的 SQL 无法执行，未向用户返回错误数据",
+      "latency_ms": 50644
+    },
+    {
+      "id": "L8-04",
+      "level": "L8",
+      "question": "退货率是多少",
+      "expect_failure": true,
+      "generated_sql": "CANNOT_ANSWER: 缺少退货率指标及其数据表",
+      "passed": true,
+      "reason": "生成的 SQL 无法执行，未向用户返回错误数据",
+      "latency_ms": 19936
+    }
+  ]
+}
