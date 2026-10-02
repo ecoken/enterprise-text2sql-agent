@@ -1,4 +1,4 @@
-# Enterprise Text2SQL Agent
+# QueryMind · 面向数据仓库的 Text2SQL 智能体
 
 > 面向企业数仓的自然语言问数系统。用户用中文提问，Agent 自动完成元数据召回、SQL 生成、校验纠错与执行，流式返回查询结果。
 
